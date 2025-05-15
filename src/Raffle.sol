@@ -44,6 +44,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /* Events */
     event RaffleEntered(address indexed player);
     event WinnerPicked(address indexed winner);
+    event RequestedRaffleWinnder(uint256 indexed requestId);
 
     constructor(
         uint256 entranceFee,
@@ -96,8 +97,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
         s_raffleState = RaffleState.CALCULATING;
 
         // Interaction (External Contract Interactions)
-        s_vrfCoordinator.requestRandomWords(
-            VRFV2PlusClient.RandomWordsRequest({
+
+        VRFV2PlusClient.RandomWordsRequest memory request = VRFV2PlusClient
+            .RandomWordsRequest({
                 keyHash: i_keyHash,
                 subId: i_subscriptionId,
                 requestConfirmations: REQUEST_CONFIRMATIONS,
@@ -106,8 +108,15 @@ contract Raffle is VRFConsumerBaseV2Plus {
                 extraArgs: VRFV2PlusClient._argsToBytes(
                     VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
                 )
-            })
-        );
+            });
+
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(request);
+
+        /*
+         *  This event is redundant becase VRFCoordinatorV2 already emits an event
+         *  that consist of requestId.
+         */
+        emit RequestedRaffleWinnder(requestId);
     }
 
     /**
