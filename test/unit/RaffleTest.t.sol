@@ -7,8 +7,9 @@ import {Raffle} from "src/Raffle.sol";
 import {HelperConfig} from "script/HelperConfig.s.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {VRFCoordinatorV2_5Mock} from "@chainlink/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {CodeConstants} from "script/HelperConfig.s.sol";
 
-contract RaffleTest is Test {
+contract RaffleTest is CodeConstants, Test {
     Raffle public raffle;
     HelperConfig public helperConfig;
 
@@ -40,6 +41,13 @@ contract RaffleTest is Test {
 
         vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
         vm.deal(PLAYER2, STARTING_PLAYER_BALANCE);
+    }
+
+    modifier skipFork() {
+        if (block.chainid != LOCAL_CHAIN_ID) {
+            return;
+        }
+        _;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -74,7 +82,7 @@ contract RaffleTest is Test {
      * @dev Let's assume there is no getter function getPlayer
      * in this case we should use vm.load(address account,bytes32 slot) returns (bytes32)
      */
-    function testRaffleRecordsPlayersWhenTheyEnterNoGetter() public {
+    function testRaffleRecordsPlayersWhenTheyEnterNoGetter() public skipFork {
         // Arrange
         vm.prank(PLAYER);
         // Act
@@ -261,41 +269,45 @@ contract RaffleTest is Test {
     /*//////////////////////////////////////////////////////////////
                            FULFILLRANDOMWORDS
     //////////////////////////////////////////////////////////////*/
-    function testFullFillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public raffleEntered {
+
+    function testFullFillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId)
+        public
+        raffleEntered
+        skipFork
+    {
         //Arrange /Act /Assert
-        // vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
-        // VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
-        console.log(randomRequestId);
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
+        //console.log(randomRequestId);
     }
 
-    function testFullfillRandomWordsPickAWinnerResetsAndSendsMoney() public raffleEntered {
+    function testFullfillRandomWordsPickAWinnerResetsAndSendsMoney() public raffleEntered skipFork {
         // Arange
         uint256 additionalEntrants = 3; // 4 total
         uint256 startingIndex = 1;
         address expectedWinnder = address(1); //what it fore
 
-        for (uint256 i = startingIndex; i < startingIndex + additionalEntrants; i++ ){
+        for (uint256 i = startingIndex; i < startingIndex + additionalEntrants; i++) {
             address newPlayer = address(uint160(i)); //converts any number to an address
             /**
              * This is another cheatcode that does:
              * vm.prank(newPlayer);
              * vm.deal(newPlayer, 1 ether);
-            */
+             */
             hoax(newPlayer, 1 ether);
             raffle.enterRaffle{value: entranceFee}();
         }
 
         uint256 startingTimeStamp = raffle.getLastTimeStamp();
-        uint256 winnerStartingBalance = expectedWinnder.balance;  //what it fore
+        uint256 winnerStartingBalance = expectedWinnder.balance; //what it fore
 
         // Act
         vm.recordLogs();
         raffle.performUpkeep("");
         Vm.Log[] memory entries = vm.getRecordedLogs();
         bytes32 requestId = entries[1].topics[1];
-        
-        
-        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId),address(raffle));
+
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle));
 
         //Assert
         address recentWinner = raffle.getRecentWinner();
@@ -306,9 +318,7 @@ contract RaffleTest is Test {
 
         assert(recentWinner == expectedWinnder);
         assert(uint256(raffleState) == 0);
-        assert(winnerBalance == winnerStartingBalance+prize);
+        assert(winnerBalance == winnerStartingBalance + prize);
         assert(endingTimeStamp > startingTimeStamp);
-
     }
-
 }
