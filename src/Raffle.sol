@@ -39,18 +39,18 @@ contract Raffle is VRFConsumerBaseV2Plus {
     /* Events */
     event RaffleEntered(address indexed player);
     event WinnerPicked(address indexed winner);
-    event RequestedRaffleWinnder(uint256 indexed requestId);
+    event RequestedRaffleWinner(uint256 indexed requestId);
 
     constructor(
         uint256 entranceFee,
-        uint256 inerval,
+        uint256 interval,
         address vrfCoordinator,
         bytes32 gasLine,
         uint256 subscriptionId,
         uint32 callbackGasLimit
     ) VRFConsumerBaseV2Plus(vrfCoordinator) {
         i_entranceFee = entranceFee;
-        i_interval = inerval;
+        i_interval = interval;
         i_keyHash = gasLine;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
@@ -104,7 +104,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
          *  This event is redundant becase VRFCoordinatorV2 already emits an event
          *  that consist of requestId.
          */
-        emit RequestedRaffleWinnder(requestId);
+        emit RequestedRaffleWinner(requestId);
     }
 
     /**
@@ -163,7 +163,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         return i_entranceFee;
     }
 
-    function getRffleState() external view returns (RaffleState) {
+    function getRaffleState() external view returns (RaffleState) {
         return s_raffleState;
     }
 

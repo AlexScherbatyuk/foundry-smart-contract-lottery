@@ -55,7 +55,7 @@ contract RaffleTest is CodeConstants, Test {
     //////////////////////////////////////////////////////////////*/
 
     function testRaffleInitializesOpenState() public view {
-        assert(raffle.getRffleState() == Raffle.RaffleState.OPEN);
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
     }
 
     function testRaffleRevertsWhenYouDontPayEnough() public {
@@ -178,7 +178,7 @@ contract RaffleTest is CodeConstants, Test {
     function testCheckUpkeepReturnsFalseIfItHasNoBalance() public {
         //Arrange
         vm.warp(block.timestamp + interval + 1); // move block time forward
-        vm.roll(block.number + 1); // increase block number (optional, bat is considered a good practice)
+        vm.roll(block.number + 1); // increase block number (optional, but is considered a good practice)
         //Act
         (bool upkeepNeeded,) = raffle.checkUpkeep("");
         //Assert
@@ -237,7 +237,7 @@ contract RaffleTest is CodeConstants, Test {
         // Arrange
         uint256 currentBalance = 0;
         uint256 numPlayers = 0;
-        Raffle.RaffleState rState = raffle.getRffleState();
+        Raffle.RaffleState rState = raffle.getRaffleState();
 
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
@@ -261,7 +261,7 @@ contract RaffleTest is CodeConstants, Test {
         bytes32 requestId = entries[1].topics[1];
 
         // Assert
-        Raffle.RaffleState raffleState = raffle.getRffleState();
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
         assert(uint256(requestId) > 0);
         assert(uint256(raffleState) == 1);
     }
@@ -311,7 +311,7 @@ contract RaffleTest is CodeConstants, Test {
 
         //Assert
         address recentWinner = raffle.getRecentWinner();
-        Raffle.RaffleState raffleState = raffle.getRffleState();
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
         uint256 winnerBalance = recentWinner.balance;
         uint256 endingTimeStamp = raffle.getLastTimeStamp();
         uint256 prize = entranceFee * (additionalEntrants + 1);
@@ -320,5 +320,112 @@ contract RaffleTest is CodeConstants, Test {
         assert(uint256(raffleState) == 0);
         assert(winnerBalance == winnerStartingBalance + prize);
         assert(endingTimeStamp > startingTimeStamp);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              ENTRANCE FEE TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testEntranceFeeIsSetCorrectly() public view {
+        assert(raffle.getEntranceFee() == entranceFee);
+    }
+
+    function testMultiplePlayersCanEnterWithExactFee() public {
+        // Arrange
+        address[] memory players = new address[](3);
+        players[0] = makeAddr("player1");
+        players[1] = makeAddr("player2");
+        players[2] = makeAddr("player3");
+
+        // Act
+        for (uint256 i = 0; i < players.length; i++) {
+            vm.prank(players[i]);
+            vm.deal(players[i], entranceFee);
+            raffle.enterRaffle{value: entranceFee}();
+        }
+
+        // Assert
+        assert(raffle.getPlayer(0) == players[0]);
+        assert(raffle.getPlayer(1) == players[1]);
+        assert(raffle.getPlayer(2) == players[2]);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              STATE MANAGEMENT TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testRaffleStateTransitionsCorrectly() public raffleEntered {
+        // Arrange - modifier raffleEntered
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+
+        // Act
+        raffle.performUpkeep("");
+        
+        // Assert
+        assert(raffle.getRaffleState() == Raffle.RaffleState.CALCULATING);
+    }
+
+    function testLastTimestampIsUpdatedAfterRaffle() public raffleEntered skipFork {
+        // Arrange
+        uint256 initialTimestamp = raffle.getLastTimeStamp();
+        
+        // Act
+        raffle.performUpkeep("");
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(1, address(raffle));
+        
+        // Assert
+        assert(raffle.getLastTimeStamp() > initialTimestamp);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              WINNER SELECTION TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testWinnerReceivesCorrectAmount() public raffleEntered skipFork {
+        // Arrange
+        uint256 initialBalance = PLAYER.balance;
+        
+        // Act
+        raffle.performUpkeep("");
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(1, address(raffle));
+        
+        // Assert
+        assert(PLAYER.balance > initialBalance);
+        assert(address(raffle).balance == 0);
+    }
+
+    function testWinnerIsRecordedCorrectly() public raffleEntered skipFork {
+        // Act
+        raffle.performUpkeep("");
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(1, address(raffle));
+        
+        // Assert
+        assert(raffle.getRecentWinner() == PLAYER);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              EDGE CASES
+    //////////////////////////////////////////////////////////////*/
+
+    function testContractHandlesMultipleRounds() public skipFork {
+        // First round
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        raffle.performUpkeep("");
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(1, address(raffle));
+        
+        // Second round
+        vm.prank(PLAYER2);
+        raffle.enterRaffle{value: entranceFee}();
+        vm.warp(block.timestamp + interval + 1);
+        vm.roll(block.number + 1);
+        raffle.performUpkeep("");
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(2, address(raffle));
+        
+        // Assert
+        assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
+        assert(raffle.getRecentWinner() == PLAYER2);
     }
 }
